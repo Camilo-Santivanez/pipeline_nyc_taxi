@@ -9,10 +9,6 @@ import click
 taxi_trips_nov2025 = "https://d37ci6vzurychx.cloudfront.net/trip-data/green_tripdata_2025-11.parquet"
 zone_dataset = "https://github.com/DataTalksClub/nyc-tlc-data/releases/download/misc/taxi_zone_lookup.csv"
 
-#LOAD DATA INTO DATAFRAMES 
-df_taxi_trips = pd.read_parquet(taxi_trips_nov2025)
-df_zone = pd.read_csv(zone_dataset)
-
 #Ensuring data types
 dtypes = { 
     "VendorID": Integer(),
@@ -31,25 +27,42 @@ dtypes = {
 @click.option('--pg-port', default=5432, type=int, help='PostgreSQL port')
 @click.option('--pg-db', default='green_ny_taxi', help='PostgreSQL database name')
 @click.option('--target-table', default='green_taxi_data', help='Target table name')
-def ingest_data(pg_user, pg_pass, pg_host, pg_port, pg_db, target_table):
+@click.option('--zones-table', default='taxi_zones', help='Zones table name')
+def ingest_data(pg_user, pg_pass, pg_host, pg_port, pg_db, target_table, zones_table):
+
+    #LOAD DATA INTO DATAFRAMES 
+    df_taxi_trips = pd.read_parquet(taxi_trips_nov2025)
+    df_zone = pd.read_csv(zone_dataset)
 
     # Creating an engine using SQLAlchemy
     engine = create_engine(f'postgresql+psycopg2://{pg_user}:{pg_pass}@{pg_host}:{pg_port}/{pg_db}')
 
-    # Create table first
+    # Create target table first
     try: 
-        print("Creating table ...")
-        df_taxi_trips.head(0).to_sql(name=f'{target_table}', con=engine, if_exists = "replace")
+        print("Creating tables ...")
+        df_taxi_trips.head(0).to_sql(name=f'{target_table}', con=engine, if_exists = "replace", 
+                                     index=False, dtype=dtypes)
     except Exception as e:
         print(f'Error at creating the table: {e}')
         return
     #Load into Postgres
     try:
         print("Loading data into Postgres")
-        df_taxi_trips.to_sql(name=f'{target_table}', con=engine, if_exists = "append")
+        df_taxi_trips.to_sql(name=f'{target_table}', con=engine, if_exists = "append", index=False,
+                             method="multi", chunksize=5000)
     except Exception as e:
         print(f'Error inserting data into the table: {e}')
         return 
+    
+    #Adding zone tables
+    try:
+        print("Creating zones table ...")
+        df_zone.head(0).to_sql(name=zones_table, con=engine, if_exists="replace", index=False)
+        print("Loading zones into Postgres")
+        df_zone.to_sql(name=zones_table, con=engine, if_exists="append", index=False)
+    except Exception as e:
+        print(f'Error inserting zones into the table: {e}')
+        return
 
 # To make it executable
 if __name__ == '__main__':
