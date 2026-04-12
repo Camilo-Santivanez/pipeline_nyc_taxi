@@ -45,3 +45,24 @@ AND total = (
 ```
 - *ANSWER*: **East Harlem North**
 
+3. For the passengers picked up in the zone named "East Harlem North" in November 2025, which was the drop off zone that had the largest tip?
+Note: it's tip , not trip. We need the name of the zone, not the ID.
+
+```
+WITH C1 AS (
+	SELECT "PULocationID", "DOLocationID", tip_amount, lpep_pickup_datetime
+	FROM public.green_taxi_data
+	JOIN public.taxi_zones ON "PULocationID" = "LocationID" 
+	AND "Zone" = 'East Harlem North'
+	AND lpep_pickup_datetime >= '2025-11-01 00:00:00' AND lpep_pickup_datetime < '2025-12-01 00:00:00' 
+)
+SELECT "Zone"
+FROM public.taxi_zones
+JOIN C1 ON "DOLocationID" = "LocationID"
+	AND tip_amount = (
+		SELECT MAX(tip_amount)
+		FROM C1
+	);
+```
+- *ANSWER*: **Yorkville West** 
+
